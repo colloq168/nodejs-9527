@@ -664,9 +664,14 @@ app.get(`/${SUB_PATH}/mihomo`, async (req, res) => {
   res.send(`proxies:\n${proxies.map(p => p.replace(/^/gm, '  ')).join('\n')}\n`);
 });
 
-// Shadowrocket 专用订阅路由 —— 恢复小火箭原生 obfs=websocket URL 格式
-// 注: XUDP / 分片 这两项,经实测小火箭未通过 URL 参数自动启用,
-// 仍需在节点 ⓘ 里手动开启。但其余字段(path/host/sni/tls/tfo)能正确填入。
+// Shadowrocket 专用订阅路由 —— 小火箭原生 obfs=websocket URL 格式
+// 实测样本对照(感谢用户提供真实可用样本):
+//   vless://base64(":uuid@ip:port")?path=...&remarks=...&obfsParam=域名
+//     &obfs=websocket&tls=1&peer=域名&tfo=1
+//     &fragment=1,length,interval,packets    ← 分片(注意顺序)
+//     &xtls=2                                ← XUDP 触发(不是 xudp=1!)
+//     &ech=域名%2BDoH地址                    ← ECH(只把 + 转成 %2B)
+//   path 编码: 仅 ? → %3F、= → %3D, 斜杠保留
 app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
   const argoDomain = getArgoDomain();
@@ -685,10 +690,12 @@ app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
   const vlessXudpFlag = process.env.VLESS_XUDP || '';
 
   const ISP = await getMetaInfo();
-  const vlessPathEnc = encodeURIComponent(`${vlessPathVal}?ed=2560`);
+  // 路径只把 ? 和 = 转义, 保留 /  (与小火箭样本一致)
+  const vlessPathEnc = `${vlessPathVal}?ed=2560`.replace(/\?/g, '%3F').replace(/=/g, '%3D');
   const echParam = (vlessEchFlag && echConfig) ? `&ech=${echConfig.replace(/\+/g, '%2B')}` : '';
   const fragParam = vlessFragFlag ? `&fragment=1,${fragLength},${fragInterval},${fragPackets}` : '';
-  const xudpParam = vlessXudpFlag ? `&xudp=1` : '';
+  // XUDP UDP 转发: 小火箭原生参数为 xtls=2 (非 xudp=1)
+  const xudpParam = vlessXudpFlag ? `&xtls=2` : '';
 
   function buildSRNode(ip, port, nodename) {
     const b64 = Buffer.from(`:${uuid}@${ip}:${port}`).toString('base64');
