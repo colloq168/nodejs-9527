@@ -600,12 +600,72 @@ async function buildSubContent() {
   return Buffer.from(subTxt).toString('base64');
 }
 
+async function buildClashContent() {
+  const argoDomain = getArgoDomain();
+  if (!argoDomain) return null;
+
+  const uuid = process.env.UUID || UUID;
+  const cfip = process.env.CFIP || CFIP;
+  const cfport = process.env.CFPORT || CFPORT;
+  const vlessPathVal = process.env.VLESS_PATH || VLESS_PATH;
+  const vmessPathVal = process.env.VMESS_PATH || VMESS_PATH;
+  const trojanPathVal = process.env.TROJAN_PATH || TROJAN_PATH;
+
+  const vlessEnable = process.env.VLESS_ENABLE !== '0';
+  const vmessEnable = process.env.VMESS_ENABLE !== '0';
+  const trojanEnable = process.env.TROJAN_ENABLE !== '0';
+
+  const ISP = await getMetaInfo();
+  const proxies = [];
+  const names = [];
+
+  function addNodes(ip, port, name) {
+    if (vlessEnable) {
+      const n = `${name}-vless`;
+      names.push(n);
+      proxies.push(`  - name: "${n}"\n    type: vless\n    server: ${ip}\n    port: ${port}\n    uuid: ${uuid}\n    network: ws\n    tls: true\n    udp: true\n    tfo: true\n    servername: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${vlessPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}`);
+    }
+    if (vmessEnable) {
+      const n = `${name}-vmess`;
+      names.push(n);
+      proxies.push(`  - name: "${n}"\n    type: vmess\n    server: ${ip}\n    port: ${port}\n    uuid: ${uuid}\n    alterId: 0\n    cipher: auto\n    network: ws\n    tls: true\n    udp: true\n    tfo: true\n    servername: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${vmessPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}`);
+    }
+    if (trojanEnable) {
+      const n = `${name}-trojan`;
+      names.push(n);
+      proxies.push(`  - name: "${n}"\n    type: trojan\n    server: ${ip}\n    port: ${port}\n    password: ${uuid}\n    network: ws\n    udp: true\n    tfo: true\n    sni: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${trojanPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}`);
+    }
+  }
+
+  addNodes(cfip, cfport, ISP);
+  const cfipList = await fetchCfipList();
+  for (const item of cfipList) {
+    const ipName = item.remark ? item.remark : `${ISP}-${item.ip}`;
+    addNodes(item.ip, item.port, ipName);
+  }
+
+  const nameList = names.map(n => `      - "${n}"`).join('\n');
+  return `proxies:\n${proxies.join('\n')}\n\nproxy-groups:\n  - name: "Auto"\n    type: url-test\n    proxies:\n${nameList}\n    url: http://www.gstatic.com/generate_204\n    interval: 300\n`;
+}
+
 // 订阅路由(动态生成)
 app.get(`/${SUB_PATH}`, async (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
   const content = await buildSubContent();
   if (content) {
     res.send(content);
+  } else {
+    res.status(503).send('Subscription not ready');
+  }
+});
+
+// mihomo/Clash 订阅路由
+app.get(`/${SUB_PATH}/clash`, async (req, res) => {
+  res.set('Content-Type', 'text/yaml; charset=utf-8');
+  res.set('Content-Disposition', 'attachment; filename="clash.yaml"');
+  const yaml = await buildClashContent();
+  if (yaml) {
+    res.send(yaml);
   } else {
     res.status(503).send('Subscription not ready');
   }
