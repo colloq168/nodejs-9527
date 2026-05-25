@@ -19,7 +19,7 @@ const UUID = process.env.UUID || '9afd1229-b893-40c1-84dd-51e7ce204913'; // 在�
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || '';          // 固定隧道域名,留空即启用临时隧道
 const ARGO_AUTH = process.env.ARGO_AUTH || '';              // 固定隧道密钥json或token,留空即启用临时隧道,json获取地址：https://json.zone.id
 const ARGO_PORT = process.env.ARGO_PORT || 8001;            // 固定隧道端口,使用token需在cloudflare后台设置和这里一致
-const CFIP = process.env.CFIP || 'saas.sin.fan';           // 节点优选域名或优选ip
+const CFIP = process.env.CFIP || '';           // 节点优选域名或优选ip
 const CFPORT = process.env.CFPORT || 443;                   // 节点优选域名或优选ip对应的端口
 const NAME = process.env.NAME || '';              // 节点名称
 const VLESS_PATH = process.env.VLESS_PATH || '/vless-argo';   // vless ws路径
@@ -318,7 +318,7 @@ async function fetchCfipList() {
 // 生成 list 和 sub 信息
 async function generateLinks(argoDomain) {
   const ISP = await getMetaInfo();
-  const nodeName = NAME ? `${NAME}-${ISP}` : ISP;
+  const nodeName = NAME ? `${NAME}${ISP}` : ISP;
   const echSuffix = ECH_CONFIG ? `&ech=${encodeURIComponent(ECH_CONFIG)}` : '';
   const vlessEch = (VLESS_ECH && ECH_CONFIG) ? echSuffix : '';
   const vmessEch = (VMESS_ECH && ECH_CONFIG);
@@ -337,15 +337,15 @@ async function generateLinks(argoDomain) {
 
   // 生成单个IP的节点组
   function buildNodes(ip, port, name) {
-    const vmessBase = { v: '2', ps: name, add: ip, port: port, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${VMESS_PATH}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+    const vmessBase = { v: '2', ps: name, add: ip, port: port, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${VMESS_PATH}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox', tfo: '1' };
     const vmessObj = Object.assign({}, vmessBase,
       vmessEch ? { ech: ECH_CONFIG } : {},
       vmessFragment ? { fragment: `${FRAGMENT_PACKETS},${FRAGMENT_LENGTH},${FRAGMENT_INTERVAL}` } : {},
       vmessXudp ? { mux: '8', muxType: 'xudp' } : {}
     );
-    return `vless://${UUID}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPath}${vlessEch}${vlessFragment}${vlessXudp}#${name}
+    return `vless://${UUID}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPath}${vlessEch}${vlessFragment}${vlessXudp}&tfo=1#${name}
 vmess://${Buffer.from(JSON.stringify(vmessObj)).toString('base64')}
-trojan://${UUID}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPath}${trojanEch}${trojanFragment}${trojanXudp}#${name}`;
+trojan://${UUID}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPath}${trojanEch}${trojanFragment}${trojanXudp}&tfo=1#${name}`;
   }
 
   // 默认节点
@@ -542,7 +542,7 @@ async function buildSubContent() {
   const trojanXudpFlag = process.env.TROJAN_XUDP || '';
 
   const ISP = await getMetaInfo();
-  const nodeName = name ? `${name}-${ISP}` : ISP;
+  const nodeName = name ? `${name}${ISP}` : ISP;
   const echSuffix = echConfig ? `&ech=${encodeURIComponent(echConfig)}` : '';
   const vlessEch = (vlessEchFlag && echConfig) ? echSuffix : '';
   const vmessEch = (vmessEchFlag && echConfig);
@@ -560,15 +560,15 @@ async function buildSubContent() {
   const trojanPathEnc = encodeURIComponent(`${trojanPathVal}?ed=2560`);
 
   function buildNodes(ip, port, nodename) {
-    const vmessBase = { v: '2', ps: nodename, add: ip, port: port, id: uuid, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${vmessPathVal}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+    const vmessBase = { v: '2', ps: nodename, add: ip, port: port, id: uuid, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${vmessPathVal}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox', tfo: '1' };
     const vmessObj = Object.assign({}, vmessBase,
       vmessEch ? { ech: echConfig } : {},
       vmessFragment ? { fragment: `${fragPackets},${fragLength},${fragInterval}` } : {},
       vmessXudp ? { mux: '8', muxType: 'xudp' } : {}
     );
-    return `vless://${uuid}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPathEnc}${vlessEch}${vlessFragment}${vlessXudp}#${nodename}
+    return `vless://${uuid}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPathEnc}${vlessEch}${vlessFragment}${vlessXudp}&tfo=1#${nodename}
 vmess://${Buffer.from(JSON.stringify(vmessObj)).toString('base64')}
-trojan://${uuid}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPathEnc}${trojanEch}${trojanFragment}${trojanXudp}#${nodename}`;
+trojan://${uuid}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPathEnc}${trojanEch}${trojanFragment}${trojanXudp}&tfo=1#${nodename}`;
   }
 
   let subTxt = buildNodes(cfip, cfport, nodeName);
