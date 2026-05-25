@@ -681,15 +681,19 @@ app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
   const fragLength = process.env.FRAGMENT_LENGTH || FRAGMENT_LENGTH;
   const fragInterval = process.env.FRAGMENT_INTERVAL || FRAGMENT_INTERVAL;
   const vlessFragFlag = process.env.VLESS_FRAGMENT || '';
+  const vlessXudpFlag = process.env.VLESS_XUDP || '';
 
   const ISP = await getMetaInfo();
   const vlessPathEnc = encodeURIComponent(`${vlessPathVal}?ed=2560`);
   const echParam = (vlessEchFlag && echConfig) ? `&ech=${echConfig.replace(/\+/g, '%2B')}` : '';
   const fragParam = vlessFragFlag ? `&fragment=1,${fragLength},${fragInterval},${fragPackets}` : '';
+  // Shadowrocket 自有 URL 里 "UDP 转发: XUDP" 的开关是独立的 xudp=1 参数,
+  // 旧代码里硬编码的 muxType=xudp 因为缺 mux= 不生效, 改成 xudp=1 才能在小火箭里识别
+  const xudpParam = vlessXudpFlag ? `&xudp=1` : '';
 
   function buildSRNode(ip, port, nodename) {
     const b64 = Buffer.from(`:${uuid}@${ip}:${port}`).toString('base64');
-    return `vless://${b64}?path=${vlessPathEnc}&remarks=${encodeURIComponent(nodename)}&obfsParam=${argoDomain}&obfs=websocket&tls=1&peer=${argoDomain}&tfo=1&muxType=xudp${fragParam}${echParam}`;
+    return `vless://${b64}?path=${vlessPathEnc}&remarks=${encodeURIComponent(nodename)}&obfsParam=${argoDomain}&obfs=websocket&tls=1&peer=${argoDomain}&tfo=1${xudpParam}${fragParam}${echParam}`;
   }
 
   let nodes = buildSRNode(cfip, cfport, ISP);
