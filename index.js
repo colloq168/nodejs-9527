@@ -501,12 +501,70 @@ startserver().catch(error => {
   console.error('Unhandled error in startserver:', error);
 });
 
-// 订阅路由(实时读取文件)
-app.get(`/${SUB_PATH}`, (req, res) => {
-  res.set('Content-Type', 'text/plain; charset=utf-8');
+// 动态获取当前 argoDomain
+function getArgoDomain() {
+  if (ARGO_AUTH && ARGO_DOMAIN) return ARGO_DOMAIN;
   try {
-    res.send(fs.readFileSync(subPath, 'utf-8'));
-  } catch {
+    const lines = fs.readFileSync(bootLogPath, 'utf-8').split('\n');
+    for (const line of lines) {
+      const m = line.match(/https?:\/\/([^ ]*trycloudflare\.com)\/?/);
+      if (m) return m[1];
+    }
+  } catch {}
+  return null;
+}
+
+// 动态生成订阅内容
+async function buildSubContent() {
+  const argoDomain = getArgoDomain();
+  if (!argoDomain) return null;
+
+  const ISP = await getMetaInfo();
+  const nodeName = NAME ? `${NAME}-${ISP}` : ISP;
+  const echSuffix = ECH_CONFIG ? `&ech=1&ech-config=${encodeURIComponent(ECH_CONFIG)}` : '';
+  const vlessEch = (VLESS_ECH && ECH_CONFIG) ? echSuffix : '';
+  const vmessEch = (VMESS_ECH && ECH_CONFIG);
+  const trojanEch = (TROJAN_ECH && ECH_CONFIG) ? echSuffix : '';
+  const fragmentSuffix = `&fragment=${FRAGMENT_PACKETS},${FRAGMENT_LENGTH},${FRAGMENT_INTERVAL}`;
+  const vlessFragment = VLESS_FRAGMENT ? fragmentSuffix : '';
+  const vmessFragment = VMESS_FRAGMENT;
+  const trojanFragment = TROJAN_FRAGMENT ? fragmentSuffix : '';
+  const xudpSuffix = '&mux=8&muxType=xudp';
+  const vlessXudp = VLESS_XUDP ? xudpSuffix : '';
+  const vmessXudp = VMESS_XUDP;
+  const trojanXudp = TROJAN_XUDP ? xudpSuffix : '';
+
+  const vlessPath = encodeURIComponent(`${VLESS_PATH}?ed=2560`);
+  const trojanPath = encodeURIComponent(`${TROJAN_PATH}?ed=2560`);
+
+  function buildNodes(ip, port, name) {
+    const vmessBase = { v: '2', ps: name, add: ip, port: port, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${VMESS_PATH}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+    const vmessObj = Object.assign({}, vmessBase,
+      vmessEch ? { ech: '1', 'ech-config': ECH_CONFIG } : {},
+      vmessFragment ? { fragment: `${FRAGMENT_PACKETS},${FRAGMENT_LENGTH},${FRAGMENT_INTERVAL}` } : {},
+      vmessXudp ? { mux: '8', muxType: 'xudp' } : {}
+    );
+    return `vless://${UUID}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPath}${vlessEch}${vlessFragment}${vlessXudp}#${name}
+vmess://${Buffer.from(JSON.stringify(vmessObj)).toString('base64')}
+trojan://${UUID}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPath}${trojanEch}${trojanFragment}${trojanXudp}#${name}`;
+  }
+
+  let subTxt = buildNodes(CFIP, CFPORT, nodeName);
+  const cfipList = await fetchCfipList();
+  for (const item of cfipList) {
+    const ipName = item.remark ? `${NAME}-${item.remark}` : `${nodeName}-${item.ip}`;
+    subTxt += '\n' + buildNodes(item.ip, item.port, ipName);
+  }
+  return Buffer.from(subTxt).toString('base64');
+}
+
+// 订阅路由(动态生成)
+app.get(`/${SUB_PATH}`, async (req, res) => {
+  res.set('Content-Type', 'text/plain; charset=utf-8');
+  const content = await buildSubContent();
+  if (content) {
+    res.send(content);
+  } else {
     res.status(503).send('Subscription not ready');
   }
 });
