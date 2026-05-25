@@ -664,20 +664,9 @@ app.get(`/${SUB_PATH}/mihomo`, async (req, res) => {
   res.send(`proxies:\n${proxies.map(p => p.replace(/^/gm, '  ')).join('\n')}\n`);
 });
 
-// Shadowrocket 专用路由 —— 输出小火箭原生 .conf 配置文件
-// 重要:这条订阅请通过 [配置] 入口导入(不是 [订阅]):
-//   配置 → 右上角 ➕ → 粘贴本路由 URL → 下载 → 使用配置
-// 这样 [Proxy] 段里的 xudp / fragment 等属性才会被小火箭解析。
-//
-// 属性名说明(基于 Surge/Shadowrocket conf 公开惯例,但部分是经验性的):
-//   ✓ 有据可查:  vless/vmess/trojan, ws=true, ws-path, ws-headers,
-//                tls=true, sni, peer, tfo=true, username, password, alterId, cipher
-//   ⚠ 经验性参数(若无效请把节点 ⓘ 截图反馈):
-//                xudp=true                  → "UDP 转发: XUDP"
-//                fragment=true              → TLS 分片开关
-//                fragment-packets=tlshello  → 分片模式
-//                fragment-length=100-200    → 分片长度
-//                fragment-interval=10-20    → 分片间隔
+// Shadowrocket 专用订阅路由 —— 恢复小火箭原生 obfs=websocket URL 格式
+// 注: XUDP / 分片 这两项,经实测小火箭未通过 URL 参数自动启用,
+// 仍需在节点 ⓘ 里手动开启。但其余字段(path/host/sni/tls/tfo)能正确填入。
 app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
   const argoDomain = getArgoDomain();
@@ -687,99 +676,32 @@ app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
   const cfip = process.env.CFIP || CFIP;
   const cfport = process.env.CFPORT || CFPORT;
   const vlessPathVal = process.env.VLESS_PATH || VLESS_PATH;
-  const vmessPathVal = process.env.VMESS_PATH || VMESS_PATH;
-  const trojanPathVal = process.env.TROJAN_PATH || TROJAN_PATH;
-  const vlessEnable = process.env.VLESS_ENABLE !== '0';
-  const vmessEnable = process.env.VMESS_ENABLE !== '0';
-  const trojanEnable = process.env.TROJAN_ENABLE !== '0';
+  const echConfig = process.env.ECH_CONFIG || '';
+  const vlessEchFlag = process.env.VLESS_ECH || '';
   const fragPackets = process.env.FRAGMENT_PACKETS || FRAGMENT_PACKETS;
   const fragLength = process.env.FRAGMENT_LENGTH || FRAGMENT_LENGTH;
   const fragInterval = process.env.FRAGMENT_INTERVAL || FRAGMENT_INTERVAL;
-  const vlessFragFlag = process.env.VLESS_FRAGMENT || VLESS_FRAGMENT;
-  const vmessFragFlag = process.env.VMESS_FRAGMENT || VMESS_FRAGMENT;
-  const trojanFragFlag = process.env.TROJAN_FRAGMENT || TROJAN_FRAGMENT;
-  const vlessXudpFlag = process.env.VLESS_XUDP || VLESS_XUDP;
-  const vmessXudpFlag = process.env.VMESS_XUDP || VMESS_XUDP;
-  const trojanXudpFlag = process.env.TROJAN_XUDP || TROJAN_XUDP;
+  const vlessFragFlag = process.env.VLESS_FRAGMENT || '';
+  const vlessXudpFlag = process.env.VLESS_XUDP || '';
 
   const ISP = await getMetaInfo();
-  const proxyLines = [];
-  const proxyNames = [];
+  const vlessPathEnc = encodeURIComponent(`${vlessPathVal}?ed=2560`);
+  const echParam = (vlessEchFlag && echConfig) ? `&ech=${echConfig.replace(/\+/g, '%2B')}` : '';
+  const fragParam = vlessFragFlag ? `&fragment=1,${fragLength},${fragInterval},${fragPackets}` : '';
+  const xudpParam = vlessXudpFlag ? `&xudp=1` : '';
 
-  // 拼接 fragment / xudp 属性串
-  function fragAttrs(flag) {
-    if (!flag) return '';
-    return `, fragment=true, fragment-packets=${fragPackets}, fragment-length=${fragLength}, fragment-interval=${fragInterval}`;
-  }
-  function xudpAttrs(flag) {
-    return flag ? `, xudp=true` : '';
+  function buildSRNode(ip, port, nodename) {
+    const b64 = Buffer.from(`:${uuid}@${ip}:${port}`).toString('base64');
+    return `vless://${b64}?path=${vlessPathEnc}&remarks=${encodeURIComponent(nodename)}&obfsParam=${argoDomain}&obfs=websocket&tls=1&peer=${argoDomain}&tfo=1${xudpParam}${fragParam}${echParam}`;
   }
 
-  function addProxy(ip, port, name) {
-    if (vlessEnable) {
-      const n = `${name}-vless`;
-      proxyNames.push(n);
-      proxyLines.push(
-        `${n} = vless, ${ip}, ${port}, username=${uuid}` +
-        `, tls=true, ws=true, ws-path=${vlessPathVal}?ed=2560` +
-        `, ws-headers=Host:${argoDomain}, sni=${argoDomain}, peer=${argoDomain}` +
-        `, tfo=true${xudpAttrs(vlessXudpFlag)}${fragAttrs(vlessFragFlag)}`
-      );
-    }
-    if (vmessEnable) {
-      const n = `${name}-vmess`;
-      proxyNames.push(n);
-      proxyLines.push(
-        `${n} = vmess, ${ip}, ${port}, username=${uuid}` +
-        `, alterId=0, cipher=auto` +
-        `, tls=true, ws=true, ws-path=${vmessPathVal}?ed=2560` +
-        `, ws-headers=Host:${argoDomain}, sni=${argoDomain}, peer=${argoDomain}` +
-        `, tfo=true${xudpAttrs(vmessXudpFlag)}${fragAttrs(vmessFragFlag)}`
-      );
-    }
-    if (trojanEnable) {
-      const n = `${name}-trojan`;
-      proxyNames.push(n);
-      proxyLines.push(
-        `${n} = trojan, ${ip}, ${port}, password=${uuid}` +
-        `, tls=true, ws=true, ws-path=${trojanPathVal}?ed=2560` +
-        `, ws-headers=Host:${argoDomain}, sni=${argoDomain}, peer=${argoDomain}` +
-        `, tfo=true${xudpAttrs(trojanXudpFlag)}${fragAttrs(trojanFragFlag)}`
-      );
-    }
-  }
-
-  if (cfip) addProxy(cfip, cfport, ISP);
+  let nodes = buildSRNode(cfip, cfport, ISP);
   const cfipList = await fetchCfipList();
   for (const item of cfipList) {
-    const ipName = item.remark || `${ISP}-${item.ip}`;
-    addProxy(item.ip, item.port, ipName);
+    const ipName = item.remark ? item.remark : `${ISP}-${item.ip}`;
+    nodes += '\n' + buildSRNode(item.ip, item.port, ipName);
   }
-
-  const proxyNameList = proxyNames.join(', ');
-  const conf = [
-    '# Shadowrocket Configuration (auto-generated)',
-    '[General]',
-    'bypass-system = true',
-    'skip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, localhost, *.local',
-    'tun-excluded-routes = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, localhost, *.local',
-    'dns-server = 223.5.5.5, 119.29.29.29, 8.8.8.8, 1.1.1.1',
-    'ipv6 = false',
-    '',
-    '[Proxy]',
-    ...proxyLines,
-    '',
-    '[Proxy Group]',
-    `Auto = url-test, ${proxyNameList}, url=http://www.gstatic.com/generate_204, interval=600`,
-    `Manual = select, Auto, ${proxyNameList}`,
-    '',
-    '[Rule]',
-    'GEOIP,CN,DIRECT',
-    'FINAL,Manual',
-    ''
-  ].join('\n');
-
-  res.send(conf);
+  res.send(nodes);
 });
 
 app.get(`/${SUB_PATH}`, async (req, res) => {
