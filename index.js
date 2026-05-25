@@ -687,9 +687,11 @@ app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
   const vlessPathEnc = encodeURIComponent(`${vlessPathVal}?ed=2560`);
   const echParam = (vlessEchFlag && echConfig) ? `&ech=${echConfig.replace(/\+/g, '%2B')}` : '';
   const fragParam = vlessFragFlag ? `&fragment=1,${fragLength},${fragInterval},${fragPackets}` : '';
-  // Shadowrocket "UDP 转发: XUDP" 在自有 URL 里沿用 Mihomo YAML 的字段名 packet-encoding。
-  // 之前用 xudp=1 只会把 UDP 转发开成普通 UDP, 用 packet-encoding=xudp 才会把类型升到 XUDP。
-  const xudpParam = vlessXudpFlag ? `&packet-encoding=xudp` : '';
+  // Shadowrocket "UDP 转发: XUDP" 触发条件:
+  //   xudp=1            — 打开 UDP 转发(只这一项 → 普通 UDP)
+  //   mux=8&muxType=xudp — 把多路复用类型升级到 XUDP 编码,muxType 必须配合 mux= 才被识别
+  // 同时给齐三个参数,Shadowrocket 会把 UDP 转发栏显示为 XUDP。
+  const xudpParam = vlessXudpFlag ? `&xudp=1&mux=8&muxType=xudp` : '';
 
   function buildSRNode(ip, port, nodename) {
     const b64 = Buffer.from(`:${uuid}@${ip}:${port}`).toString('base64');
