@@ -642,7 +642,8 @@ async function buildClashContent() {
 
   function buildEch(enabled) {
     if (!enabled || !echConfig) return '';
-    return `\n    ech-opts:\n      enable: true\n      pq-signature-schemes-enabled: true\n      dynamic-record-sizing-disabled: false\n      config:\n        - dns-name: ${echDomain}\n          doh-server: ${echDoh}`;
+    // ECH_CONFIG 格式: "域名+DoH地址", mihomo 通过 DNS 自动获取 ECH 配置
+    return `\n    ech-opts:\n      enable: true\n      query-server-name: ${echDomain}`;
   }
 
   function buildFragment(enabled) {
