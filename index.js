@@ -661,7 +661,7 @@ app.get(`/${SUB_PATH}/mihomo`, async (req, res) => {
     const ipName = item.remark || `${ISP}-${item.ip}`;
     addNodes(item.ip, item.port, ipName);
   }
-  res.send(`proxies:\n${proxies.join('\n')}\n`);
+  res.send(`proxies:\n${proxies.map(p => p.replace(/^/gm, '  ')).join('\n')}\n`);
 });
 
 // 订阅路由(动态生成)
