@@ -302,11 +302,11 @@ async function fetchCfipList() {
   if (!CFIP_URL) return [];
   try {
     const response = await axios.get(CFIP_URL, { timeout: 5000 });
-    const lines = response.data.split(/[\n\s]+/).filter(Boolean);
+    const lines = response.data.split(/\n+/).map(l => l.trim()).filter(Boolean);
     return lines.slice(0, CFIP_COUNT).map(line => {
       const [ipPort, ...rest] = line.split('#');
-      const [ip, port] = ipPort.split(':');
-      const remark = rest.join('#').trim();
+      const [ip, port] = ipPort.trim().split(':');
+      const remark = rest.join('#').split(/\s+/)[0].trim(); // 只取#后第一个词作为remark(如 "GB")
       return { ip, port: port || '443', remark };
     });
   } catch (error) {
@@ -319,7 +319,7 @@ async function fetchCfipList() {
 async function generateLinks(argoDomain) {
   const ISP = await getMetaInfo();
   const nodeName = NAME ? `${NAME}-${ISP}` : ISP;
-  const echSuffix = ECH_CONFIG ? `&ech=1&ech-config=${encodeURIComponent(ECH_CONFIG)}` : '';
+  const echSuffix = ECH_CONFIG ? `&ech=true&ech-config=${encodeURIComponent(ECH_CONFIG)}` : '';
   const vlessEch = (VLESS_ECH && ECH_CONFIG) ? echSuffix : '';
   const vmessEch = (VMESS_ECH && ECH_CONFIG);
   const trojanEch = (TROJAN_ECH && ECH_CONFIG) ? echSuffix : '';
@@ -543,7 +543,7 @@ async function buildSubContent() {
 
   const ISP = await getMetaInfo();
   const nodeName = name ? `${name}-${ISP}` : ISP;
-  const echSuffix = echConfig ? `&ech=1&ech-config=${encodeURIComponent(echConfig)}` : '';
+  const echSuffix = echConfig ? `&ech=true&ech-config=${encodeURIComponent(echConfig)}` : '';
   const vlessEch = (vlessEchFlag && echConfig) ? echSuffix : '';
   const vmessEch = (vmessEchFlag && echConfig);
   const trojanEch = (trojanEchFlag && echConfig) ? echSuffix : '';
