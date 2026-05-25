@@ -610,30 +610,66 @@ async function buildClashContent() {
   const vlessPathVal = process.env.VLESS_PATH || VLESS_PATH;
   const vmessPathVal = process.env.VMESS_PATH || VMESS_PATH;
   const trojanPathVal = process.env.TROJAN_PATH || TROJAN_PATH;
+  const echConfig = process.env.ECH_CONFIG || ECH_CONFIG || '';
+  const vlessEchFlag = process.env.VLESS_ECH || VLESS_ECH;
+  const vmessEchFlag = process.env.VMESS_ECH || VMESS_ECH;
+  const trojanEchFlag = process.env.TROJAN_ECH || TROJAN_ECH;
+  const fragPackets = process.env.FRAGMENT_PACKETS || FRAGMENT_PACKETS;
+  const fragLength = process.env.FRAGMENT_LENGTH || FRAGMENT_LENGTH;
+  const fragInterval = process.env.FRAGMENT_INTERVAL || FRAGMENT_INTERVAL;
+  const vlessFragFlag = process.env.VLESS_FRAGMENT || VLESS_FRAGMENT;
+  const vmessFragFlag = process.env.VMESS_FRAGMENT || VMESS_FRAGMENT;
+  const trojanFragFlag = process.env.TROJAN_FRAGMENT || TROJAN_FRAGMENT;
+  const vlessXudpFlag = process.env.VLESS_XUDP || VLESS_XUDP;
+  const vmessXudpFlag = process.env.VMESS_XUDP || VMESS_XUDP;
+  const trojanXudpFlag = process.env.TROJAN_XUDP || TROJAN_XUDP;
 
   const vlessEnable = process.env.VLESS_ENABLE !== '0';
   const vmessEnable = process.env.VMESS_ENABLE !== '0';
   const trojanEnable = process.env.TROJAN_ENABLE !== '0';
 
+  // 解析 ECH 配置: "域名+DoH地址" 格式
+  let echDomain = '', echDoh = '';
+  if (echConfig && echConfig.includes('+')) {
+    const parts = echConfig.split('+');
+    echDomain = parts[0];
+    echDoh = parts.slice(1).join('+');
+  }
+
   const ISP = await getMetaInfo();
   const proxies = [];
   const names = [];
+
+  function buildEch(enabled) {
+    if (!enabled || !echConfig) return '';
+    return `\n    ech-opts:\n      enable: true\n      pq-signature-schemes-enabled: true\n      dynamic-record-sizing-disabled: false\n      config:\n        - dns-name: ${echDomain}\n          doh-server: ${echDoh}`;
+  }
+
+  function buildFragment(enabled) {
+    if (!enabled) return '';
+    return `\n    fragment:\n      packets: ${fragPackets}\n      length: ${fragLength}\n      interval: ${fragInterval}`;
+  }
+
+  function buildSmux(enabled) {
+    if (!enabled) return '';
+    return `\n    smux:\n      enabled: true\n      protocol: h2mux\n      max-connections: 8\n      padding: true`;
+  }
 
   function addNodes(ip, port, name) {
     if (vlessEnable) {
       const n = `${name}-vless`;
       names.push(n);
-      proxies.push(`  - name: "${n}"\n    type: vless\n    server: ${ip}\n    port: ${port}\n    uuid: ${uuid}\n    network: ws\n    tls: true\n    udp: true\n    tfo: true\n    servername: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${vlessPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}`);
+      proxies.push(`  - name: "${n}"\n    type: vless\n    server: ${ip}\n    port: ${port}\n    uuid: ${uuid}\n    network: ws\n    tls: true\n    udp: true\n    tfo: true\n    servername: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${vlessPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}${buildEch(vlessEchFlag)}${buildFragment(vlessFragFlag)}${buildSmux(vlessXudpFlag)}`);
     }
     if (vmessEnable) {
       const n = `${name}-vmess`;
       names.push(n);
-      proxies.push(`  - name: "${n}"\n    type: vmess\n    server: ${ip}\n    port: ${port}\n    uuid: ${uuid}\n    alterId: 0\n    cipher: auto\n    network: ws\n    tls: true\n    udp: true\n    tfo: true\n    servername: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${vmessPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}`);
+      proxies.push(`  - name: "${n}"\n    type: vmess\n    server: ${ip}\n    port: ${port}\n    uuid: ${uuid}\n    alterId: 0\n    cipher: auto\n    network: ws\n    tls: true\n    udp: true\n    tfo: true\n    servername: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${vmessPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}${buildEch(vmessEchFlag)}${buildFragment(vmessFragFlag)}${buildSmux(vmessXudpFlag)}`);
     }
     if (trojanEnable) {
       const n = `${name}-trojan`;
       names.push(n);
-      proxies.push(`  - name: "${n}"\n    type: trojan\n    server: ${ip}\n    port: ${port}\n    password: ${uuid}\n    network: ws\n    udp: true\n    tfo: true\n    sni: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${trojanPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}`);
+      proxies.push(`  - name: "${n}"\n    type: trojan\n    server: ${ip}\n    port: ${port}\n    password: ${uuid}\n    network: ws\n    udp: true\n    tfo: true\n    sni: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${trojanPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}${buildEch(trojanEchFlag)}${buildFragment(trojanFragFlag)}${buildSmux(trojanXudpFlag)}`);
     }
   }
 
