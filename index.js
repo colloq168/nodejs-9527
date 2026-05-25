@@ -674,7 +674,7 @@ async function buildClashContent() {
     }
   }
 
-  addNodes(cfip, cfport, ISP);
+  if (cfip) addNodes(cfip, cfport, ISP);
   const cfipList = await fetchCfipList();
   for (const item of cfipList) {
     const ipName = item.remark ? item.remark : `${ISP}-${item.ip}`;
