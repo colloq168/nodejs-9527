@@ -666,6 +666,9 @@ app.get(`/${SUB_PATH}/mihomo`, async (req, res) => {
 
 // 订阅路由(动态生成)
 // Shadowrocket 专用订阅路由
+// 注意:小火箭的 obfs=websocket 自有 URL 解析路径不支持 "UDP 转发: XUDP",
+// 这里换用 v2ray 标准 vless URL 格式(走小火箭的 v2ray 标准解析器),
+// XUDP 通过标准的 mux=8&muxType=xudp 触发,同时仍支持 ECH 和分片。
 app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
   const argoDomain = getArgoDomain();
@@ -685,17 +688,17 @@ app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
 
   const ISP = await getMetaInfo();
   const vlessPathEnc = encodeURIComponent(`${vlessPathVal}?ed=2560`);
-  const echParam = (vlessEchFlag && echConfig) ? `&ech=${echConfig.replace(/\+/g, '%2B')}` : '';
-  const fragParam = vlessFragFlag ? `&fragment=1,${fragLength},${fragInterval},${fragPackets}` : '';
-  // Shadowrocket "UDP 转发: XUDP" 触发条件:
-  //   xudp=1            — 打开 UDP 转发(只这一项 → 普通 UDP)
-  //   mux=8&muxType=xudp — 把多路复用类型升级到 XUDP 编码,muxType 必须配合 mux= 才被识别
-  // 同时给齐三个参数,Shadowrocket 会把 UDP 转发栏显示为 XUDP。
-  const xudpParam = vlessXudpFlag ? `&xudp=1&mux=8&muxType=xudp` : '';
+  const echParam = (vlessEchFlag && echConfig) ? `&ech=${encodeURIComponent(echConfig)}` : '';
+  const fragParam = vlessFragFlag ? `&fragment=${fragPackets},${fragLength},${fragInterval}` : '';
+  const xudpParam = vlessXudpFlag ? `&mux=8&muxType=xudp` : '';
 
   function buildSRNode(ip, port, nodename) {
-    const b64 = Buffer.from(`:${uuid}@${ip}:${port}`).toString('base64');
-    return `vless://${b64}?path=${vlessPathEnc}&remarks=${encodeURIComponent(nodename)}&obfsParam=${argoDomain}&obfs=websocket&tls=1&peer=${argoDomain}&tfo=1${xudpParam}${fragParam}${echParam}`;
+    // v2ray 标准 vless URL: vless://uuid@host:port?...#remark
+    return `vless://${uuid}@${ip}:${port}`
+         + `?encryption=none&security=tls&sni=${argoDomain}&fp=firefox`
+         + `&type=ws&host=${argoDomain}&path=${vlessPathEnc}`
+         + `${xudpParam}${fragParam}${echParam}`
+         + `&tfo=1#${encodeURIComponent(nodename)}`;
   }
 
   let nodes = buildSRNode(cfip, cfport, ISP);
