@@ -319,7 +319,7 @@ async function fetchCfipList() {
 async function generateLinks(argoDomain) {
   const ISP = await getMetaInfo();
   const nodeName = NAME ? `${NAME}-${ISP}` : ISP;
-  const echSuffix = ECH_CONFIG ? `&ech=true&ech-config=${encodeURIComponent(ECH_CONFIG)}` : '';
+  const echSuffix = ECH_CONFIG ? `&ech=${encodeURIComponent(ECH_CONFIG)}` : '';
   const vlessEch = (VLESS_ECH && ECH_CONFIG) ? echSuffix : '';
   const vmessEch = (VMESS_ECH && ECH_CONFIG);
   const trojanEch = (TROJAN_ECH && ECH_CONFIG) ? echSuffix : '';
@@ -339,7 +339,7 @@ async function generateLinks(argoDomain) {
   function buildNodes(ip, port, name) {
     const vmessBase = { v: '2', ps: name, add: ip, port: port, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${VMESS_PATH}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
     const vmessObj = Object.assign({}, vmessBase,
-      vmessEch ? { ech: '1', 'ech-config': ECH_CONFIG } : {},
+      vmessEch ? { ech: ECH_CONFIG } : {},
       vmessFragment ? { fragment: `${FRAGMENT_PACKETS},${FRAGMENT_LENGTH},${FRAGMENT_INTERVAL}` } : {},
       vmessXudp ? { mux: '8', muxType: 'xudp' } : {}
     );
@@ -543,7 +543,7 @@ async function buildSubContent() {
 
   const ISP = await getMetaInfo();
   const nodeName = name ? `${name}-${ISP}` : ISP;
-  const echSuffix = echConfig ? `&ech=true&ech-config=${encodeURIComponent(echConfig)}` : '';
+  const echSuffix = echConfig ? `&ech=${encodeURIComponent(echConfig)}` : '';
   const vlessEch = (vlessEchFlag && echConfig) ? echSuffix : '';
   const vmessEch = (vmessEchFlag && echConfig);
   const trojanEch = (trojanEchFlag && echConfig) ? echSuffix : '';
@@ -562,7 +562,7 @@ async function buildSubContent() {
   function buildNodes(ip, port, nodename) {
     const vmessBase = { v: '2', ps: nodename, add: ip, port: port, id: uuid, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${vmessPathVal}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
     const vmessObj = Object.assign({}, vmessBase,
-      vmessEch ? { ech: '1', 'ech-config': echConfig } : {},
+      vmessEch ? { ech: echConfig } : {},
       vmessFragment ? { fragment: `${fragPackets},${fragLength},${fragInterval}` } : {},
       vmessXudp ? { mux: '8', muxType: 'xudp' } : {}
     );
