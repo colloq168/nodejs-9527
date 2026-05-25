@@ -600,9 +600,11 @@ async function buildSubContent() {
   return Buffer.from(subTxt).toString('base64');
 }
 
-async function buildClashContent() {
+// mihomo 专用订阅路由(不含 xray 专有参数)
+app.get(`/${SUB_PATH}/mihomo`, async (req, res) => {
+  res.set('Content-Type', 'text/plain; charset=utf-8');
   const argoDomain = getArgoDomain();
-  if (!argoDomain) return null;
+  if (!argoDomain) return res.status(503).send('Subscription not ready');
 
   const uuid = process.env.UUID || UUID;
   const cfip = process.env.CFIP || CFIP;
@@ -610,169 +612,37 @@ async function buildClashContent() {
   const vlessPathVal = process.env.VLESS_PATH || VLESS_PATH;
   const vmessPathVal = process.env.VMESS_PATH || VMESS_PATH;
   const trojanPathVal = process.env.TROJAN_PATH || TROJAN_PATH;
-  const echConfig = process.env.ECH_CONFIG || ECH_CONFIG || '';
-  const vlessEchFlag = process.env.VLESS_ECH || VLESS_ECH;
-  const vmessEchFlag = process.env.VMESS_ECH || VMESS_ECH;
-  const trojanEchFlag = process.env.TROJAN_ECH || TROJAN_ECH;
-  const vlessXudpFlag = process.env.VLESS_XUDP || VLESS_XUDP;
-  const vmessXudpFlag = process.env.VMESS_XUDP || VMESS_XUDP;
-  const trojanXudpFlag = process.env.TROJAN_XUDP || TROJAN_XUDP;
-
   const vlessEnable = process.env.VLESS_ENABLE !== '0';
   const vmessEnable = process.env.VMESS_ENABLE !== '0';
   const trojanEnable = process.env.TROJAN_ENABLE !== '0';
 
-  // 解析 ECH 配置: "域名+DoH地址" 格式
-  let echDomain = '';
-  if (echConfig && echConfig.includes('+')) {
-    echDomain = echConfig.split('+')[0];
-  }
-
   const ISP = await getMetaInfo();
-  const names = [];
+  const vlessPath = encodeURIComponent(`${vlessPathVal}?ed=2560`);
+  const trojanPath = encodeURIComponent(`${trojanPathVal}?ed=2560`);
 
-  function buildProxy(opts) {
-    const proxy = {
-      name: opts.name,
-      type: opts.type,
-      server: opts.ip,
-      port: parseInt(opts.port),
-      udp: true,
-      tfo: true,
-      network: 'ws',
-      tls: true,
-      servername: argoDomain,
-      'client-fingerprint': 'firefox',
-      'ws-opts': {
-        path: opts.wsPath,
-        headers: { Host: argoDomain },
-        'max-early-data': 2560,
-        'early-data-header-name': 'Sec-WebSocket-Protocol'
-      }
-    };
-    if (opts.type === 'vless') {
-      proxy.uuid = uuid;
-    } else if (opts.type === 'vmess') {
-      proxy.uuid = uuid;
-      proxy.alterId = 0;
-      proxy.cipher = 'auto';
-    } else if (opts.type === 'trojan') {
-      proxy.password = uuid;
-      proxy.sni = argoDomain;
-    }
-    // ECH 配置 (顶级字段)
-    if (opts.echEnabled && echConfig) {
-      proxy['ech-opts'] = { enable: true, 'query-server-name': echDomain };
-    }
-    // smux/xudp 配置 (顶级字段)
-    if (opts.xudpEnabled) {
-      proxy.smux = { enabled: true, protocol: 'h2mux', 'max-connections': 8, padding: true };
-    }
-    return proxy;
-  }
-
-  const proxyList = [];
-
-  function addNodes(ip, port, name) {
+  function buildNodes(ip, port, name) {
+    const nodes = [];
     if (vlessEnable) {
-      const n = `${name}-vless`;
-      names.push(n);
-      proxyList.push(buildProxy({ name: n, type: 'vless', ip, port, wsPath: vlessPathVal, echEnabled: vlessEchFlag, xudpEnabled: vlessXudpFlag }));
+      nodes.push(`vless://${uuid}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPath}#${name}`);
     }
     if (vmessEnable) {
-      const n = `${name}-vmess`;
-      names.push(n);
-      proxyList.push(buildProxy({ name: n, type: 'vmess', ip, port, wsPath: vmessPathVal, echEnabled: vmessEchFlag, xudpEnabled: vmessXudpFlag }));
+      const obj = { v: '2', ps: name, add: ip, port: port, id: uuid, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${vmessPathVal}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+      nodes.push(`vmess://${Buffer.from(JSON.stringify(obj)).toString('base64')}`);
     }
     if (trojanEnable) {
-      const n = `${name}-trojan`;
-      names.push(n);
-      proxyList.push(buildProxy({ name: n, type: 'trojan', ip, port, wsPath: trojanPathVal, echEnabled: trojanEchFlag, xudpEnabled: trojanXudpFlag }));
+      nodes.push(`trojan://${uuid}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPath}#${name}`);
     }
+    return nodes;
   }
 
-  if (cfip) addNodes(cfip, cfport, ISP);
+  let allNodes = buildNodes(cfip, cfport, ISP);
   const cfipList = await fetchCfipList();
   for (const item of cfipList) {
-    const ipName = item.remark ? item.remark : `${ISP}-${item.ip}`;
-    addNodes(item.ip, item.port, ipName);
+    const ipName = item.remark || `${ISP}-${item.ip}`;
+    allNodes = allNodes.concat(buildNodes(item.ip, item.port, ipName));
   }
-
-  // 生成完整的 mihomo 配置
-  const config = {
-    'mixed-port': 7890,
-    'allow-lan': true,
-    mode: 'rule',
-    'log-level': 'info',
-    'unified-delay': true,
-    'tcp-concurrent': true,
-    dns: {
-      enable: true,
-      'enhanced-mode': 'fake-ip',
-      'fake-ip-range': '198.18.0.1/16',
-      nameserver: ['https://dns.google/dns-query', 'https://1.1.1.1/dns-query']
-    },
-    proxies: proxyList,
-    'proxy-groups': [
-      { name: '🚀 节点选择', type: 'select', proxies: ['♻️ 自动选择', ...names] },
-      { name: '♻️ 自动选择', type: 'url-test', proxies: names, url: 'https://www.gstatic.com/generate_204', interval: 300, tolerance: 50 }
-    ],
-    rules: [
-      'GEOIP,LAN,DIRECT',
-      'GEOIP,CN,DIRECT',
-      'MATCH,🚀 节点选择'
-    ]
-  };
-
-  // 手动序列化 YAML (避免引入额外依赖)
-  function toYaml(obj, indent = 0) {
-    const pad = ' '.repeat(indent);
-    let result = '';
-    if (Array.isArray(obj)) {
-      for (const item of obj) {
-        if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
-          const keys = Object.keys(item);
-          result += `${pad}- ${keys[0]}: ${formatValue(item[keys[0]])}\n`;
-          for (let i = 1; i < keys.length; i++) {
-            const val = item[keys[i]];
-            if (typeof val === 'object' && val !== null) {
-              result += `${pad}  ${keys[i]}:\n${toYaml(val, indent + 4)}`;
-            } else {
-              result += `${pad}  ${keys[i]}: ${formatValue(val)}\n`;
-            }
-          }
-        } else {
-          result += `${pad}- ${formatValue(item)}\n`;
-        }
-      }
-    } else if (typeof obj === 'object' && obj !== null) {
-      for (const [key, val] of Object.entries(obj)) {
-        if (typeof val === 'object' && val !== null) {
-          result += `${pad}${key}:\n${toYaml(val, indent + 2)}`;
-        } else {
-          result += `${pad}${key}: ${formatValue(val)}\n`;
-        }
-      }
-    }
-    return result;
-  }
-
-  function formatValue(val) {
-    if (val === true) return 'true';
-    if (val === false) return 'false';
-    if (val === null || val === undefined) return '""';
-    if (typeof val === 'number') return String(val);
-    if (typeof val === 'string') {
-      if (/[:{}\[\],&*#?|<>=!%@`\n]/.test(val) || val === '' || val.startsWith(' ') || val.endsWith(' ')) {
-        return `"${val.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-      }
-      return val;
-    }
-    return String(val);
-  }
-
-  return toYaml(config);
-}
+  res.send(Buffer.from(allNodes.join('\n')).toString('base64'));
+});
 
 // 订阅路由(动态生成)
 app.get(`/${SUB_PATH}`, async (req, res) => {
@@ -780,18 +650,6 @@ app.get(`/${SUB_PATH}`, async (req, res) => {
   const content = await buildSubContent();
   if (content) {
     res.send(content);
-  } else {
-    res.status(503).send('Subscription not ready');
-  }
-});
-
-// mihomo/Clash 订阅路由
-app.get(`/${SUB_PATH}/clash`, async (req, res) => {
-  res.set('Content-Type', 'text/yaml; charset=utf-8');
-  res.set('Content-Disposition', 'attachment; filename="clash.yaml"');
-  const yaml = await buildClashContent();
-  if (yaml) {
-    res.send(yaml);
   } else {
     res.status(503).send('Subscription not ready');
   }
