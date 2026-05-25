@@ -614,12 +614,6 @@ async function buildClashContent() {
   const vlessEchFlag = process.env.VLESS_ECH || VLESS_ECH;
   const vmessEchFlag = process.env.VMESS_ECH || VMESS_ECH;
   const trojanEchFlag = process.env.TROJAN_ECH || TROJAN_ECH;
-  const fragPackets = process.env.FRAGMENT_PACKETS || FRAGMENT_PACKETS;
-  const fragLength = process.env.FRAGMENT_LENGTH || FRAGMENT_LENGTH;
-  const fragInterval = process.env.FRAGMENT_INTERVAL || FRAGMENT_INTERVAL;
-  const vlessFragFlag = process.env.VLESS_FRAGMENT || VLESS_FRAGMENT;
-  const vmessFragFlag = process.env.VMESS_FRAGMENT || VMESS_FRAGMENT;
-  const trojanFragFlag = process.env.TROJAN_FRAGMENT || TROJAN_FRAGMENT;
   const vlessXudpFlag = process.env.VLESS_XUDP || VLESS_XUDP;
   const vmessXudpFlag = process.env.VMESS_XUDP || VMESS_XUDP;
   const trojanXudpFlag = process.env.TROJAN_XUDP || TROJAN_XUDP;
@@ -629,48 +623,71 @@ async function buildClashContent() {
   const trojanEnable = process.env.TROJAN_ENABLE !== '0';
 
   // 解析 ECH 配置: "域名+DoH地址" 格式
-  let echDomain = '', echDoh = '';
+  let echDomain = '';
   if (echConfig && echConfig.includes('+')) {
-    const parts = echConfig.split('+');
-    echDomain = parts[0];
-    echDoh = parts.slice(1).join('+');
+    echDomain = echConfig.split('+')[0];
   }
 
   const ISP = await getMetaInfo();
-  const proxies = [];
   const names = [];
 
-  function buildEch(enabled) {
-    if (!enabled || !echConfig) return '';
-    // ECH_CONFIG 格式: "域名+DoH地址", mihomo 通过 DNS 自动获取 ECH 配置
-    return `\n    ech-opts:\n      enable: true\n      query-server-name: ${echDomain}`;
+  function buildProxy(opts) {
+    const proxy = {
+      name: opts.name,
+      type: opts.type,
+      server: opts.ip,
+      port: parseInt(opts.port),
+      udp: true,
+      tfo: true,
+      network: 'ws',
+      tls: true,
+      servername: argoDomain,
+      'client-fingerprint': 'firefox',
+      'ws-opts': {
+        path: opts.wsPath,
+        headers: { Host: argoDomain },
+        'max-early-data': 2560,
+        'early-data-header-name': 'Sec-WebSocket-Protocol'
+      }
+    };
+    if (opts.type === 'vless') {
+      proxy.uuid = uuid;
+    } else if (opts.type === 'vmess') {
+      proxy.uuid = uuid;
+      proxy.alterId = 0;
+      proxy.cipher = 'auto';
+    } else if (opts.type === 'trojan') {
+      proxy.password = uuid;
+      proxy.sni = argoDomain;
+    }
+    // ECH 配置 (顶级字段)
+    if (opts.echEnabled && echConfig) {
+      proxy['ech-opts'] = { enable: true, 'query-server-name': echDomain };
+    }
+    // smux/xudp 配置 (顶级字段)
+    if (opts.xudpEnabled) {
+      proxy.smux = { enabled: true, protocol: 'h2mux', 'max-connections': 8, padding: true };
+    }
+    return proxy;
   }
 
-  function buildFragment(enabled) {
-    if (!enabled) return '';
-    return `\n    fragment:\n      packets: ${fragPackets}\n      length: ${fragLength}\n      interval: ${fragInterval}`;
-  }
-
-  function buildSmux(enabled) {
-    if (!enabled) return '';
-    return `\n    smux:\n      enabled: true\n      protocol: h2mux\n      max-connections: 8\n      padding: true`;
-  }
+  const proxyList = [];
 
   function addNodes(ip, port, name) {
     if (vlessEnable) {
       const n = `${name}-vless`;
       names.push(n);
-      proxies.push(`  - name: "${n}"\n    type: vless\n    server: ${ip}\n    port: ${port}\n    uuid: ${uuid}\n    network: ws\n    tls: true\n    udp: true\n    tfo: true\n    servername: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${vlessPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}${buildEch(vlessEchFlag)}${buildFragment(vlessFragFlag)}${buildSmux(vlessXudpFlag)}`);
+      proxyList.push(buildProxy({ name: n, type: 'vless', ip, port, wsPath: vlessPathVal, echEnabled: vlessEchFlag, xudpEnabled: vlessXudpFlag }));
     }
     if (vmessEnable) {
       const n = `${name}-vmess`;
       names.push(n);
-      proxies.push(`  - name: "${n}"\n    type: vmess\n    server: ${ip}\n    port: ${port}\n    uuid: ${uuid}\n    alterId: 0\n    cipher: auto\n    network: ws\n    tls: true\n    udp: true\n    tfo: true\n    servername: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${vmessPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}${buildEch(vmessEchFlag)}${buildFragment(vmessFragFlag)}${buildSmux(vmessXudpFlag)}`);
+      proxyList.push(buildProxy({ name: n, type: 'vmess', ip, port, wsPath: vmessPathVal, echEnabled: vmessEchFlag, xudpEnabled: vmessXudpFlag }));
     }
     if (trojanEnable) {
       const n = `${name}-trojan`;
       names.push(n);
-      proxies.push(`  - name: "${n}"\n    type: trojan\n    server: ${ip}\n    port: ${port}\n    password: ${uuid}\n    network: ws\n    udp: true\n    tfo: true\n    sni: ${argoDomain}\n    client-fingerprint: firefox\n    ws-opts:\n      path: "${trojanPathVal}?ed=2560"\n      headers:\n        Host: ${argoDomain}${buildEch(trojanEchFlag)}${buildFragment(trojanFragFlag)}${buildSmux(trojanXudpFlag)}`);
+      proxyList.push(buildProxy({ name: n, type: 'trojan', ip, port, wsPath: trojanPathVal, echEnabled: trojanEchFlag, xudpEnabled: trojanXudpFlag }));
     }
   }
 
@@ -681,7 +698,80 @@ async function buildClashContent() {
     addNodes(item.ip, item.port, ipName);
   }
 
-  return `proxies:\n${proxies.join('\n')}\n`;
+  // 生成完整的 mihomo 配置
+  const config = {
+    'mixed-port': 7890,
+    'allow-lan': true,
+    mode: 'rule',
+    'log-level': 'info',
+    'unified-delay': true,
+    'tcp-concurrent': true,
+    dns: {
+      enable: true,
+      'enhanced-mode': 'fake-ip',
+      'fake-ip-range': '198.18.0.1/16',
+      nameserver: ['https://dns.google/dns-query', 'https://1.1.1.1/dns-query']
+    },
+    proxies: proxyList,
+    'proxy-groups': [
+      { name: '🚀 节点选择', type: 'select', proxies: ['♻️ 自动选择', ...names] },
+      { name: '♻️ 自动选择', type: 'url-test', proxies: names, url: 'https://www.gstatic.com/generate_204', interval: 300, tolerance: 50 }
+    ],
+    rules: [
+      'GEOIP,LAN,DIRECT',
+      'GEOIP,CN,DIRECT',
+      'MATCH,🚀 节点选择'
+    ]
+  };
+
+  // 手动序列化 YAML (避免引入额外依赖)
+  function toYaml(obj, indent = 0) {
+    const pad = ' '.repeat(indent);
+    let result = '';
+    if (Array.isArray(obj)) {
+      for (const item of obj) {
+        if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+          const keys = Object.keys(item);
+          result += `${pad}- ${keys[0]}: ${formatValue(item[keys[0]])}\n`;
+          for (let i = 1; i < keys.length; i++) {
+            const val = item[keys[i]];
+            if (typeof val === 'object' && val !== null) {
+              result += `${pad}  ${keys[i]}:\n${toYaml(val, indent + 4)}`;
+            } else {
+              result += `${pad}  ${keys[i]}: ${formatValue(val)}\n`;
+            }
+          }
+        } else {
+          result += `${pad}- ${formatValue(item)}\n`;
+        }
+      }
+    } else if (typeof obj === 'object' && obj !== null) {
+      for (const [key, val] of Object.entries(obj)) {
+        if (typeof val === 'object' && val !== null) {
+          result += `${pad}${key}:\n${toYaml(val, indent + 2)}`;
+        } else {
+          result += `${pad}${key}: ${formatValue(val)}\n`;
+        }
+      }
+    }
+    return result;
+  }
+
+  function formatValue(val) {
+    if (val === true) return 'true';
+    if (val === false) return 'false';
+    if (val === null || val === undefined) return '""';
+    if (typeof val === 'number') return String(val);
+    if (typeof val === 'string') {
+      if (/[:{}\[\],&*#?|<>=!%@`\n]/.test(val) || val === '' || val.startsWith(' ') || val.endsWith(' ')) {
+        return `"${val.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+      }
+      return val;
+    }
+    return String(val);
+  }
+
+  return toYaml(config);
 }
 
 // 订阅路由(动态生成)
