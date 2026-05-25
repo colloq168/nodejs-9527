@@ -306,7 +306,7 @@ async function fetchCfipList() {
     return lines.slice(0, CFIP_COUNT).map(line => {
       const [ipPort, ...rest] = line.split('#');
       const [ip, port] = ipPort.trim().split(':');
-      const remark = rest.join('#').split(/\s+/)[0].trim(); // 只取#后第一个词作为remark(如 "GB")
+      const remark = rest.join('#').trim();
       return { ip, port: port || '443', remark };
     });
   } catch (error) {
