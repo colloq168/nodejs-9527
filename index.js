@@ -665,13 +665,13 @@ app.get(`/${SUB_PATH}/mihomo`, async (req, res) => {
 });
 
 // Shadowrocket 专用订阅路由 —— 小火箭原生 obfs=websocket URL 格式
-// 实测样本对照(感谢用户提供真实可用样本):
+// 字段对照(基于真实可用样本):
 //   vless://base64(":uuid@ip:port")?path=...&remarks=...&obfsParam=域名
 //     &obfs=websocket&tls=1&peer=域名&tfo=1
 //     &fragment=1,length,interval,packets    ← 分片(注意顺序)
-//     &xtls=2                                ← XUDP 触发(不是 xudp=1!)
 //     &ech=域名%2BDoH地址                    ← ECH(只把 + 转成 %2B)
 //   path 编码: 仅 ? → %3F、= → %3D, 斜杠保留
+//   注: XUDP 不通过 URL 参数自动启用, 需在节点 ⓘ 里手动选择
 app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
   const argoDomain = getArgoDomain();
@@ -687,19 +687,16 @@ app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
   const fragLength = process.env.FRAGMENT_LENGTH || FRAGMENT_LENGTH;
   const fragInterval = process.env.FRAGMENT_INTERVAL || FRAGMENT_INTERVAL;
   const vlessFragFlag = process.env.VLESS_FRAGMENT || '';
-  const vlessXudpFlag = process.env.VLESS_XUDP || '';
 
   const ISP = await getMetaInfo();
   // 路径只把 ? 和 = 转义, 保留 /  (与小火箭样本一致)
   const vlessPathEnc = `${vlessPathVal}?ed=2560`.replace(/\?/g, '%3F').replace(/=/g, '%3D');
   const echParam = (vlessEchFlag && echConfig) ? `&ech=${echConfig.replace(/\+/g, '%2B')}` : '';
   const fragParam = vlessFragFlag ? `&fragment=1,${fragLength},${fragInterval},${fragPackets}` : '';
-  // XUDP UDP 转发: 小火箭原生参数为 xtls=2 (非 xudp=1)
-  const xudpParam = vlessXudpFlag ? `&xtls=2` : '';
 
   function buildSRNode(ip, port, nodename) {
     const b64 = Buffer.from(`:${uuid}@${ip}:${port}`).toString('base64');
-    return `vless://${b64}?path=${vlessPathEnc}&remarks=${encodeURIComponent(nodename)}&obfsParam=${argoDomain}&obfs=websocket&tls=1&peer=${argoDomain}&tfo=1${xudpParam}${fragParam}${echParam}`;
+    return `vless://${b64}?path=${vlessPathEnc}&remarks=${encodeURIComponent(nodename)}&obfsParam=${argoDomain}&obfs=websocket&tls=1&peer=${argoDomain}&tfo=1${fragParam}${echParam}`;
   }
 
   let nodes = buildSRNode(cfip, cfport, ISP);
