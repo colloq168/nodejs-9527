@@ -519,40 +519,62 @@ async function buildSubContent() {
   const argoDomain = getArgoDomain();
   if (!argoDomain) return null;
 
+  // 实时读取环境变量
+  const uuid = process.env.UUID || UUID;
+  const cfip = process.env.CFIP || CFIP;
+  const cfport = process.env.CFPORT || CFPORT;
+  const name = process.env.NAME || NAME;
+  const vlessPathVal = process.env.VLESS_PATH || VLESS_PATH;
+  const vmessPathVal = process.env.VMESS_PATH || VMESS_PATH;
+  const trojanPathVal = process.env.TROJAN_PATH || TROJAN_PATH;
+  const echConfig = process.env.ECH_CONFIG || '';
+  const vlessEchFlag = process.env.VLESS_ECH || '';
+  const vmessEchFlag = process.env.VMESS_ECH || '';
+  const trojanEchFlag = process.env.TROJAN_ECH || '';
+  const fragPackets = process.env.FRAGMENT_PACKETS || FRAGMENT_PACKETS;
+  const fragLength = process.env.FRAGMENT_LENGTH || FRAGMENT_LENGTH;
+  const fragInterval = process.env.FRAGMENT_INTERVAL || FRAGMENT_INTERVAL;
+  const vlessFragFlag = process.env.VLESS_FRAGMENT || '';
+  const vmessFragFlag = process.env.VMESS_FRAGMENT || '';
+  const trojanFragFlag = process.env.TROJAN_FRAGMENT || '';
+  const vlessXudpFlag = process.env.VLESS_XUDP || '';
+  const vmessXudpFlag = process.env.VMESS_XUDP || '';
+  const trojanXudpFlag = process.env.TROJAN_XUDP || '';
+
   const ISP = await getMetaInfo();
-  const nodeName = NAME ? `${NAME}-${ISP}` : ISP;
-  const echSuffix = ECH_CONFIG ? `&ech=1&ech-config=${encodeURIComponent(ECH_CONFIG)}` : '';
-  const vlessEch = (VLESS_ECH && ECH_CONFIG) ? echSuffix : '';
-  const vmessEch = (VMESS_ECH && ECH_CONFIG);
-  const trojanEch = (TROJAN_ECH && ECH_CONFIG) ? echSuffix : '';
-  const fragmentSuffix = `&fragment=${FRAGMENT_PACKETS},${FRAGMENT_LENGTH},${FRAGMENT_INTERVAL}`;
-  const vlessFragment = VLESS_FRAGMENT ? fragmentSuffix : '';
-  const vmessFragment = VMESS_FRAGMENT;
-  const trojanFragment = TROJAN_FRAGMENT ? fragmentSuffix : '';
+  const nodeName = name ? `${name}-${ISP}` : ISP;
+  const echSuffix = echConfig ? `&ech=1&ech-config=${encodeURIComponent(echConfig)}` : '';
+  const vlessEch = (vlessEchFlag && echConfig) ? echSuffix : '';
+  const vmessEch = (vmessEchFlag && echConfig);
+  const trojanEch = (trojanEchFlag && echConfig) ? echSuffix : '';
+  const fragmentSuffix = `&fragment=${fragPackets},${fragLength},${fragInterval}`;
+  const vlessFragment = vlessFragFlag ? fragmentSuffix : '';
+  const vmessFragment = vmessFragFlag;
+  const trojanFragment = trojanFragFlag ? fragmentSuffix : '';
   const xudpSuffix = '&mux=8&muxType=xudp';
-  const vlessXudp = VLESS_XUDP ? xudpSuffix : '';
-  const vmessXudp = VMESS_XUDP;
-  const trojanXudp = TROJAN_XUDP ? xudpSuffix : '';
+  const vlessXudp = vlessXudpFlag ? xudpSuffix : '';
+  const vmessXudp = vmessXudpFlag;
+  const trojanXudp = trojanXudpFlag ? xudpSuffix : '';
 
-  const vlessPath = encodeURIComponent(`${VLESS_PATH}?ed=2560`);
-  const trojanPath = encodeURIComponent(`${TROJAN_PATH}?ed=2560`);
+  const vlessPathEnc = encodeURIComponent(`${vlessPathVal}?ed=2560`);
+  const trojanPathEnc = encodeURIComponent(`${trojanPathVal}?ed=2560`);
 
-  function buildNodes(ip, port, name) {
-    const vmessBase = { v: '2', ps: name, add: ip, port: port, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${VMESS_PATH}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
+  function buildNodes(ip, port, nodename) {
+    const vmessBase = { v: '2', ps: nodename, add: ip, port: port, id: uuid, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${vmessPathVal}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
     const vmessObj = Object.assign({}, vmessBase,
-      vmessEch ? { ech: '1', 'ech-config': ECH_CONFIG } : {},
-      vmessFragment ? { fragment: `${FRAGMENT_PACKETS},${FRAGMENT_LENGTH},${FRAGMENT_INTERVAL}` } : {},
+      vmessEch ? { ech: '1', 'ech-config': echConfig } : {},
+      vmessFragment ? { fragment: `${fragPackets},${fragLength},${fragInterval}` } : {},
       vmessXudp ? { mux: '8', muxType: 'xudp' } : {}
     );
-    return `vless://${UUID}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPath}${vlessEch}${vlessFragment}${vlessXudp}#${name}
+    return `vless://${uuid}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPathEnc}${vlessEch}${vlessFragment}${vlessXudp}#${nodename}
 vmess://${Buffer.from(JSON.stringify(vmessObj)).toString('base64')}
-trojan://${UUID}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPath}${trojanEch}${trojanFragment}${trojanXudp}#${name}`;
+trojan://${uuid}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPathEnc}${trojanEch}${trojanFragment}${trojanXudp}#${nodename}`;
   }
 
-  let subTxt = buildNodes(CFIP, CFPORT, nodeName);
+  let subTxt = buildNodes(cfip, cfport, nodeName);
   const cfipList = await fetchCfipList();
   for (const item of cfipList) {
-    const ipName = item.remark ? `${NAME}-${item.remark}` : `${nodeName}-${item.ip}`;
+    const ipName = item.remark ? `${name}-${item.remark}` : `${nodeName}-${item.ip}`;
     subTxt += '\n' + buildNodes(item.ip, item.port, ipName);
   }
   return Buffer.from(subTxt).toString('base64');
