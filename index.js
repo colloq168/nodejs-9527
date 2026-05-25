@@ -21,7 +21,6 @@ const ARGO_AUTH = process.env.ARGO_AUTH || '';              // 固定隧道密�
 const ARGO_PORT = process.env.ARGO_PORT || 8001;            // 固定隧道端口,使用token需在cloudflare后台设置和这里一致
 const CFIP = process.env.CFIP || '';           // 节点优选域名或优选ip
 const CFPORT = process.env.CFPORT || 443;                   // 节点优选域名或优选ip对应的端口
-const NAME = process.env.NAME || '';              // 节点名称
 const VLESS_PATH = process.env.VLESS_PATH || '/vless-argo';   // vless ws路径
 const VMESS_PATH = process.env.VMESS_PATH || '/vmess-argo';   // vmess ws路径
 const TROJAN_PATH = process.env.TROJAN_PATH || '/trojan-argo'; // trojan ws路径
@@ -318,7 +317,7 @@ async function fetchCfipList() {
 // 生成 list 和 sub 信息
 async function generateLinks(argoDomain) {
   const ISP = await getMetaInfo();
-  const nodeName = NAME ? `${NAME}${ISP}` : ISP;
+  const nodeName = ISP;
   const echSuffix = ECH_CONFIG ? `&ech=${encodeURIComponent(ECH_CONFIG)}` : '';
   const vlessEch = (VLESS_ECH && ECH_CONFIG) ? echSuffix : '';
   const vmessEch = (VMESS_ECH && ECH_CONFIG);
@@ -354,7 +353,7 @@ trojan://${UUID}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws
   // 从URL获取额外优选IP
   const cfipList = await fetchCfipList();
   for (const item of cfipList) {
-    const ipName = item.remark ? `${NAME}-${item.remark}` : `${nodeName}-${item.ip}`;
+    const ipName = item.remark ? item.remark : `${nodeName}-${item.ip}`;
     subTxt += '\n' + buildNodes(item.ip, item.port, ipName);
   }
 
@@ -523,7 +522,6 @@ async function buildSubContent() {
   const uuid = process.env.UUID || UUID;
   const cfip = process.env.CFIP || CFIP;
   const cfport = process.env.CFPORT || CFPORT;
-  const name = process.env.NAME || NAME;
   const vlessPathVal = process.env.VLESS_PATH || VLESS_PATH;
   const vmessPathVal = process.env.VMESS_PATH || VMESS_PATH;
   const trojanPathVal = process.env.TROJAN_PATH || TROJAN_PATH;
@@ -542,7 +540,7 @@ async function buildSubContent() {
   const trojanXudpFlag = process.env.TROJAN_XUDP || '';
 
   const ISP = await getMetaInfo();
-  const nodeName = name ? `${name}${ISP}` : ISP;
+  const nodeName = ISP;
   const echSuffix = echConfig ? `&ech=${encodeURIComponent(echConfig)}` : '';
   const vlessEch = (vlessEchFlag && echConfig) ? echSuffix : '';
   const vmessEch = (vmessEchFlag && echConfig);
@@ -574,7 +572,7 @@ trojan://${uuid}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws
   let subTxt = buildNodes(cfip, cfport, nodeName);
   const cfipList = await fetchCfipList();
   for (const item of cfipList) {
-    const ipName = item.remark ? `${name}-${item.remark}` : `${nodeName}-${item.ip}`;
+    const ipName = item.remark ? item.remark : `${nodeName}-${item.ip}`;
     subTxt += '\n' + buildNodes(item.ip, item.port, ipName);
   }
   return Buffer.from(subTxt).toString('base64');
