@@ -569,15 +569,26 @@ async function buildSubContent() {
   const trojanPathEnc = encodeURIComponent(`${trojanPathVal}?ed=2560`);
 
   function buildNodes(ip, port, nodename) {
-    const vmessBase = { v: '2', ps: nodename, add: ip, port: port, id: uuid, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${vmessPathVal}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox', tfo: '1' };
-    const vmessObj = Object.assign({}, vmessBase,
-      vmessEch ? { ech: echConfig } : {},
-      vmessFragment ? { fragment: `${fragPackets},${fragLength},${fragInterval}` } : {},
-      vmessXudp ? { mux: '8', muxType: 'xudp' } : {}
-    );
-    return `vless://${uuid}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPathEnc}${vlessEch}${vlessFragment}${vlessXudp}&tfo=1#${nodename}
-vmess://${Buffer.from(JSON.stringify(vmessObj)).toString('base64')}
-trojan://${uuid}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPathEnc}${trojanEch}${trojanFragment}${trojanXudp}&tfo=1#${nodename}`;
+    const vlessEnable = process.env.VLESS_ENABLE !== '0';
+    const vmessEnable = process.env.VMESS_ENABLE !== '0';
+    const trojanEnable = process.env.TROJAN_ENABLE !== '0';
+    const nodes = [];
+    if (vlessEnable) {
+      nodes.push(`vless://${uuid}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPathEnc}${vlessEch}${vlessFragment}${vlessXudp}&tfo=1#${nodename}`);
+    }
+    if (vmessEnable) {
+      const vmessBase = { v: '2', ps: nodename, add: ip, port: port, id: uuid, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${vmessPathVal}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox', tfo: '1' };
+      const vmessObj = Object.assign({}, vmessBase,
+        vmessEch ? { ech: echConfig } : {},
+        vmessFragment ? { fragment: `${fragPackets},${fragLength},${fragInterval}` } : {},
+        vmessXudp ? { mux: '8', muxType: 'xudp' } : {}
+      );
+      nodes.push(`vmess://${Buffer.from(JSON.stringify(vmessObj)).toString('base64')}`);
+    }
+    if (trojanEnable) {
+      nodes.push(`trojan://${uuid}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPathEnc}${trojanEch}${trojanFragment}${trojanXudp}&tfo=1#${nodename}`);
+    }
+    return nodes.join('\n');
   }
 
   let subTxt = buildNodes(cfip, cfport, nodeName);
