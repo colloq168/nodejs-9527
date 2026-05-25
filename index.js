@@ -689,7 +689,7 @@ app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
 
   function buildSRNode(ip, port, nodename) {
     const b64 = Buffer.from(`:${uuid}@${ip}:${port}`).toString('base64');
-    return `vless://${b64}?path=${vlessPathEnc}&remarks=${encodeURIComponent(nodename)}&obfsParam=${argoDomain}&obfs=websocket&tls=1&peer=${argoDomain}&tfo=1${fragParam}&udp=3${echParam}`;
+    return `vless://${b64}?path=${vlessPathEnc}&remarks=${encodeURIComponent(nodename)}&obfsParam=${argoDomain}&obfs=websocket&tls=1&peer=${argoDomain}&tfo=1${fragParam}&udp=3&xtls=2${echParam}`;
   }
 
   let nodes = buildSRNode(cfip, cfport, ISP);
