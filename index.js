@@ -698,7 +698,7 @@ app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
     const ipName = item.remark ? item.remark : `${ISP}-${item.ip}`;
     nodes += '\n' + buildSRNode(item.ip, item.port, ipName);
   }
-  res.send(Buffer.from(nodes).toString('base64'));
+  res.send(nodes);
 });
 
 app.get(`/${SUB_PATH}`, async (req, res) => {
