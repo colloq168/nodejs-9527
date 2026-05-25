@@ -364,12 +364,6 @@ trojan://${UUID}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws
   console.log(`${FILE_PATH}/sub.txt saved successfully`);
 
   await uploadNodes();
-
-  // 注册订阅路由
-  app.get(`/${SUB_PATH}`, (req, res) => {
-    res.set('Content-Type', 'text/plain; charset=utf-8');
-    res.send(Buffer.from(subTxt).toString('base64'));
-  });
 }
 
 // 获取临时隧道domain
@@ -505,6 +499,16 @@ async function startserver() {
 
 startserver().catch(error => {
   console.error('Unhandled error in startserver:', error);
+});
+
+// 订阅路由(实时读取文件)
+app.get(`/${SUB_PATH}`, (req, res) => {
+  res.set('Content-Type', 'text/plain; charset=utf-8');
+  try {
+    res.send(fs.readFileSync(subPath, 'utf-8'));
+  } catch {
+    res.status(503).send('Subscription not ready');
+  }
 });
 
 // 根路由
