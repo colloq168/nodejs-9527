@@ -600,9 +600,9 @@ async function buildSubContent() {
   return Buffer.from(subTxt).toString('base64');
 }
 
-// mihomo 专用订阅路由(不含 xray 专有参数)
+// mihomo 专用订阅路由(YAML proxies 格式, 支持 ech/fragment/tfo/xudp)
 app.get(`/${SUB_PATH}/mihomo`, async (req, res) => {
-  res.set('Content-Type', 'text/plain; charset=utf-8');
+  res.set('Content-Type', 'text/yaml; charset=utf-8');
   const argoDomain = getArgoDomain();
   if (!argoDomain) return res.status(503).send('Subscription not ready');
 
@@ -615,33 +615,53 @@ app.get(`/${SUB_PATH}/mihomo`, async (req, res) => {
   const vlessEnable = process.env.VLESS_ENABLE !== '0';
   const vmessEnable = process.env.VMESS_ENABLE !== '0';
   const trojanEnable = process.env.TROJAN_ENABLE !== '0';
+  const echConfig = process.env.ECH_CONFIG || ECH_CONFIG || '';
+  const vlessEchFlag = process.env.VLESS_ECH || VLESS_ECH;
+  const vmessEchFlag = process.env.VMESS_ECH || VMESS_ECH;
+  const trojanEchFlag = process.env.TROJAN_ECH || TROJAN_ECH;
+  const fragPackets = process.env.FRAGMENT_PACKETS || FRAGMENT_PACKETS;
+  const fragLength = process.env.FRAGMENT_LENGTH || FRAGMENT_LENGTH;
+  const fragInterval = process.env.FRAGMENT_INTERVAL || FRAGMENT_INTERVAL;
+  const vlessFragFlag = process.env.VLESS_FRAGMENT || VLESS_FRAGMENT;
+  const vmessFragFlag = process.env.VMESS_FRAGMENT || VMESS_FRAGMENT;
+  const trojanFragFlag = process.env.TROJAN_FRAGMENT || TROJAN_FRAGMENT;
 
-  const ISP = await getMetaInfo();
-  const vlessPath = encodeURIComponent(`${vlessPathVal}?ed=2560`);
-  const trojanPath = encodeURIComponent(`${trojanPathVal}?ed=2560`);
-
-  function buildNodes(ip, port, name) {
-    const nodes = [];
-    if (vlessEnable) {
-      nodes.push(`vless://${uuid}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPath}#${name}`);
-    }
-    if (vmessEnable) {
-      const obj = { v: '2', ps: name, add: ip, port: port, id: uuid, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${vmessPathVal}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox' };
-      nodes.push(`vmess://${Buffer.from(JSON.stringify(obj)).toString('base64')}`);
-    }
-    if (trojanEnable) {
-      nodes.push(`trojan://${uuid}@${ip}:${port}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${trojanPath}#${name}`);
-    }
-    return nodes;
+  let echDomain = '';
+  if (echConfig && echConfig.includes('+')) {
+    echDomain = echConfig.split('+')[0];
   }
 
-  let allNodes = buildNodes(cfip, cfport, ISP);
+  const ISP = await getMetaInfo();
+  const proxies = [];
+
+  function echBlock(flag) {
+    if (!flag || !echConfig) return '';
+    return `\n  ech-opts:\n    enable: true\n    query-server-name: ${echDomain}`;
+  }
+  function fragBlock(flag) {
+    if (!flag) return '';
+    return `\n  fragment:\n    packets: ${fragPackets}\n    length: ${fragLength}\n    interval: ${fragInterval}`;
+  }
+
+  function addNodes(ip, port, name) {
+    if (vlessEnable) {
+      proxies.push(`- name: "${name}-vless"\n  type: vless\n  server: ${ip}\n  port: ${port}\n  uuid: ${uuid}\n  udp: true\n  tfo: true\n  tls: true\n  network: ws\n  servername: ${argoDomain}\n  client-fingerprint: firefox\n  packet-encoding: xudp\n  ws-opts:\n    path: "${vlessPathVal}?ed=2560"\n    headers:\n      Host: ${argoDomain}${echBlock(vlessEchFlag)}${fragBlock(vlessFragFlag)}`);
+    }
+    if (vmessEnable) {
+      proxies.push(`- name: "${name}-vmess"\n  type: vmess\n  server: ${ip}\n  port: ${port}\n  uuid: ${uuid}\n  alterId: 0\n  cipher: auto\n  udp: true\n  tfo: true\n  tls: true\n  network: ws\n  servername: ${argoDomain}\n  client-fingerprint: firefox\n  packet-encoding: xudp\n  ws-opts:\n    path: "${vmessPathVal}?ed=2560"\n    headers:\n      Host: ${argoDomain}${echBlock(vmessEchFlag)}${fragBlock(vmessFragFlag)}`);
+    }
+    if (trojanEnable) {
+      proxies.push(`- name: "${name}-trojan"\n  type: trojan\n  server: ${ip}\n  port: ${port}\n  password: ${uuid}\n  udp: true\n  tfo: true\n  network: ws\n  sni: ${argoDomain}\n  client-fingerprint: firefox\n  ws-opts:\n    path: "${trojanPathVal}?ed=2560"\n    headers:\n      Host: ${argoDomain}${echBlock(trojanEchFlag)}${fragBlock(trojanFragFlag)}`);
+    }
+  }
+
+  if (cfip) addNodes(cfip, cfport, ISP);
   const cfipList = await fetchCfipList();
   for (const item of cfipList) {
     const ipName = item.remark || `${ISP}-${item.ip}`;
-    allNodes = allNodes.concat(buildNodes(item.ip, item.port, ipName));
+    addNodes(item.ip, item.port, ipName);
   }
-  res.send(Buffer.from(allNodes.join('\n')).toString('base64'));
+  res.send(`proxies:\n${proxies.join('\n')}\n`);
 });
 
 // 订阅路由(动态生成)
