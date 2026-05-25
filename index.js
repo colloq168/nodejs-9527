@@ -681,8 +681,7 @@ async function buildClashContent() {
     addNodes(item.ip, item.port, ipName);
   }
 
-  const nameList = names.map(n => `      - "${n}"`).join('\n');
-  return `proxies:\n${proxies.join('\n')}\n\nproxy-groups:\n  - name: "Auto"\n    type: url-test\n    proxies:\n${nameList}\n    url: http://www.gstatic.com/generate_204\n    interval: 300\n`;
+  return `proxies:\n${proxies.join('\n')}\n`;
 }
 
 // 订阅路由(动态生成)
