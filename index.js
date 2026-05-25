@@ -665,6 +665,42 @@ app.get(`/${SUB_PATH}/mihomo`, async (req, res) => {
 });
 
 // 订阅路由(动态生成)
+// Shadowrocket 专用订阅路由
+app.get(`/${SUB_PATH}/shadowrocket`, async (req, res) => {
+  res.set('Content-Type', 'text/plain; charset=utf-8');
+  const argoDomain = getArgoDomain();
+  if (!argoDomain) return res.status(503).send('Subscription not ready');
+
+  const uuid = process.env.UUID || UUID;
+  const cfip = process.env.CFIP || CFIP;
+  const cfport = process.env.CFPORT || CFPORT;
+  const vlessPathVal = process.env.VLESS_PATH || VLESS_PATH;
+  const echConfig = process.env.ECH_CONFIG || '';
+  const vlessEchFlag = process.env.VLESS_ECH || '';
+  const fragPackets = process.env.FRAGMENT_PACKETS || FRAGMENT_PACKETS;
+  const fragLength = process.env.FRAGMENT_LENGTH || FRAGMENT_LENGTH;
+  const fragInterval = process.env.FRAGMENT_INTERVAL || FRAGMENT_INTERVAL;
+  const vlessFragFlag = process.env.VLESS_FRAGMENT || '';
+
+  const ISP = await getMetaInfo();
+  const vlessPathEnc = encodeURIComponent(`${vlessPathVal}?ed=2560`);
+  const echParam = (vlessEchFlag && echConfig) ? `&ech=${echConfig.replace(/\+/g, '%2B')}` : '';
+  const fragParam = vlessFragFlag ? `&fragment=1,${fragLength},${fragInterval},${fragPackets}` : '';
+
+  function buildSRNode(ip, port, nodename) {
+    const b64 = Buffer.from(`:${uuid}@${ip}:${port}`).toString('base64');
+    return `vless://${b64}?path=${vlessPathEnc}&remarks=${encodeURIComponent(nodename)}&obfsParam=${argoDomain}&obfs=websocket&tls=1&peer=${argoDomain}&tfo=1${fragParam}&udp=3${echParam}`;
+  }
+
+  let nodes = buildSRNode(cfip, cfport, ISP);
+  const cfipList = await fetchCfipList();
+  for (const item of cfipList) {
+    const ipName = item.remark ? item.remark : `${ISP}-${item.ip}`;
+    nodes += '\n' + buildSRNode(item.ip, item.port, ipName);
+  }
+  res.send(Buffer.from(nodes).toString('base64'));
+});
+
 app.get(`/${SUB_PATH}`, async (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
   const content = await buildSubContent();
