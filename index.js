@@ -341,7 +341,7 @@ async function generateLinks(argoDomain) {
   function buildNodes(ip, port, name) {
     const nodes = [];
     if (VLESS_ENABLE) {
-      nodes.push(`vless://${UUID}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPath}${vlessEch}${vlessFragment}${vlessXudp}&tfo=1#${name}`);
+      nodes.push(`vless://${UUID}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPath}${vlessEch}${vlessFragment}${vlessXudp}&tfo=1&udp=0#${name}`);
     }
     if (VMESS_ENABLE) {
       const vmessBase = { v: '2', ps: name, add: ip, port: port, id: UUID, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${VMESS_PATH}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox', tfo: '1' };
@@ -574,7 +574,7 @@ async function buildSubContent() {
     const trojanEnable = process.env.TROJAN_ENABLE !== '0';
     const nodes = [];
     if (vlessEnable) {
-      nodes.push(`vless://${uuid}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPathEnc}${vlessEch}${vlessFragment}${vlessXudp}&tfo=1#${nodename}`);
+      nodes.push(`vless://${uuid}@${ip}:${port}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=${vlessPathEnc}${vlessEch}${vlessFragment}${vlessXudp}&tfo=1&udp=0#${nodename}`);
     }
     if (vmessEnable) {
       const vmessBase = { v: '2', ps: nodename, add: ip, port: port, id: uuid, aid: '0', scy: 'auto', net: 'ws', type: 'none', host: argoDomain, path: `${vmessPathVal}?ed=2560`, tls: 'tls', sni: argoDomain, alpn: '', fp: 'firefox', tfo: '1' };
