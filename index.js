@@ -125,7 +125,7 @@ function generateConfig() {
   const config = {
     log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' },
     inbounds: [
-      { port: ARGO_PORT, protocol: 'vless', settings: { clients: [{ id: UUID, flow: 'xtls-rprx-vision' }], decryption: 'none', fallbacks: [{ dest: PORT }, { path: VLESS_PATH, dest: 3002 }, { path: VMESS_PATH, dest: 3003 }, { path: TROJAN_PATH, dest: 3004 }] }, streamSettings: { network: 'tcp' } },
+      { port: ARGO_PORT, protocol: 'vless', settings: { clients: [{ id: UUID, flow: 'xtls-rprx-vision' }], decryption: 'none', fallbacks: [{ dest: parseInt(PORT) }, { path: VLESS_PATH, dest: 3002 }, { path: VMESS_PATH, dest: 3003 }, { path: TROJAN_PATH, dest: 3004 }] }, streamSettings: { network: 'tcp' } },
       { port: 3002, listen: "127.0.0.1", protocol: "vless", settings: { clients: [{ id: UUID, level: 0 }], decryption: "none" }, streamSettings: { network: "ws", security: "none", wsSettings: { path: VLESS_PATH } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
       { port: 3003, listen: "127.0.0.1", protocol: "vmess", settings: { clients: [{ id: UUID, alterId: 0 }] }, streamSettings: { network: "ws", wsSettings: { path: VMESS_PATH } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
       { port: 3004, listen: "127.0.0.1", protocol: "trojan", settings: { clients: [{ password: UUID }] }, streamSettings: { network: "ws", security: "none", wsSettings: { path: TROJAN_PATH } }, sniffing: { enabled: true, destOverride: ["http", "tls", "quic"], metadataOnly: false } },
@@ -213,15 +213,15 @@ async function downloadFilesAndRun() {
     let args;
 
     if (ARGO_AUTH.match(/^[A-Z0-9a-z=]{120,250}$/)) {
-      args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 run --token ${ARGO_AUTH}`;
+      args = `tunnel --edge-ip-version auto --no-autoupdate run --token ${ARGO_AUTH}`;
     } else if (ARGO_AUTH.match(/TunnelSecret/)) {
       args = `tunnel --edge-ip-version auto --config ${FILE_PATH}/tunnel.yml run`;
     } else {
-      args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${bootLogPath} --loglevel info --url http://localhost:${ARGO_PORT}`;
+      args = `tunnel --edge-ip-version auto --no-autoupdate --logfile ${bootLogPath} --loglevel info --url http://localhost:${ARGO_PORT}`;
     }
 
     try {
-      await exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
+      await exec(`nohup ${botPath} ${args} > ${FILE_PATH}/bot.log 2>&1 &`);
       console.log(`${botName} is running`);
       await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch (error) {
