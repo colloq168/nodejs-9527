@@ -202,8 +202,7 @@ async function downloadFilesAndRun() {
 
   // 运行xr-ay
   try {
-    // 【修改】：将 >/dev/null 2>&1 改为输出到 web.log
-    await exec(`nohup ${webPath} -c ${configPath} > ${FILE_PATH}/web.log 2>&1 &`);
+    const command1 = `nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`;
     console.log(`${webName} is running`);
     await new Promise((resolve) => setTimeout(resolve, 1000));
   } catch (error) {
@@ -219,12 +218,11 @@ async function downloadFilesAndRun() {
     } else if (ARGO_AUTH.match(/TunnelSecret/)) {
       args = `tunnel --edge-ip-version auto --config ${FILE_PATH}/tunnel.yml run`;
     } else {
-      args = `tunnel --edge-ip-version auto --no-autoupdate --logfile ${bootLogPath} --loglevel info --url http://localhost:${ARGO_PORT}`;
+      args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${bootLogPath} --loglevel info --url http://localhost:${ARGO_PORT}`;
     }
 
     try {
-      // 【修改】：将 >/dev/null 2>&1 改为输出到 bot.log
-      await exec(`nohup ${botPath} ${args} > ${FILE_PATH}/bot.log 2>&1 &`);
+      await exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
       console.log(`${botName} is running`);
       await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch (error) {
@@ -411,7 +409,7 @@ async function extractDomains() {
       }
 
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      const args = `tunnel --edge-ip-version auto --no-autoupdate --logfile ${bootLogPath} --loglevel info --url http://localhost:${ARGO_PORT}`;
+      const args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${bootLogPath} --loglevel info --url http://localhost:${ARGO_PORT}`;
       try {
         await exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`);
         console.log(`${botName} is running`);
